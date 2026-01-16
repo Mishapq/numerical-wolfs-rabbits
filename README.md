@@ -1,2 +1,2 @@
-# numerical-aerodynamics-project
-Numerical methods project: airflow around obstacles
+# numerical-natsim-project
+Numerical methods project: simulation of rabbits and wolfs
