@@ -1,0 +1,58 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import random
+from PIL import Image
+
+GRID_SIZE = 50
+NUM_wolf = 20
+NUM_rabbit = 20
+Hunting_skill_average = 0.8
+food_counter_wolf = 3 #amount of food that wolf needs to eat to make new wolf (and to be alive)
+food_counter_rabbit = 8 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
+FEAR_RADIUS = 3
+
+wolf_img = Image.new('RGB', (1, 1), color = 'red') # 1x1 pixel red square
+rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
+rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
+
+class Agent:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+class home_rabbit(Agent):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+#    def check(self, rabbit):
+# needs to check if there is two rabbits in home, if it is true no more rabbits allowed
+class home_wolf(Agent):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+#    def check(self, rabbit):
+# shood be bigger then one space to be able to take all the wolfs
+class wolf(Agent):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.speed = np.clip(np.random.normal(Hunting_skill_average, 0.1), 0.1, 0.9)
+        self.food_counter = 0
+#Here needs to be logic for wolfs to move
+class rabbit(Agent):
+    def __init__(self, x, y):
+        super().__init__(x,y)
+        self.food_counter = 0
+#Here needs to be logic for rabbits to move
+
+home_wolf_location = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(1)]
+#Now randomized, need to change to spawn in center
+wolfs = [wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_wolf)] 
+#Now randomized, need to change to spawn in radius of home wolf
+rabbits = [rabbit(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit)] 
+#Now randomized, need to change to spawn around center (outside of the radius of home wolf)
+homes_rabbit = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit/2)]
+#Now randomized, need to change to spawn around center (outside of the radius of hove wolf)
+
+def update(frame):
+    global wolfs, rabbits, homes_rabbit, home_wolf_location
+
+    
