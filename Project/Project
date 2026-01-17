@@ -8,13 +8,19 @@ GRID_SIZE = 50
 NUM_wolf = 20
 NUM_rabbit = 20
 Hunting_skill_average = 0.8
-food_counter_wolf = 3 #amount of food that wolf needs to eat to make new wolf (and to be alive)
+food_counter_wolf = 2 #amount of food that wolf needs to eat to make new wolf (and to be alive)
+max_days_without_food = 10 #amount of days wolf can live without food
 food_counter_rabbit = 8 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
-FEAR_RADIUS = 3
+Starting_amount_rabbits_in_house = 2 #amount of rabbits that are in one house in the begining of run
+rabbit_sight_radius = 4 #from what distance rabbit can see wolf
+wolf_sight_radius = 5 #from what distance wolf can see rabbit
+Home_wolf_size = 15 #size of a house of wolfs
 
 wolf_img = Image.new('RGB', (1, 1), color = 'red') # 1x1 pixel red square
 rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
-rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
+home_rabbit_img = Image.new('RGB', (1, 1), color = 'white') # 1x1 pixel white square
+home_wolf_img = Image.new('RGB', (1, 1), color = 'gray') 
+# Should be able to see throug color of wolf home
 
 class Agent:
     def __init__(self, x, y):
@@ -29,30 +35,158 @@ class home_rabbit(Agent):
 class home_wolf(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
-#    def check(self, rabbit):
-# shood be bigger then one space to be able to take all the wolfs
+
 class wolf(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.speed = np.clip(np.random.normal(Hunting_skill_average, 0.1), 0.1, 0.9)
         self.food_counter = 0
-#Here needs to be logic for wolfs to move
+        self.hunger = 0
+    def move(self, rabbits, home_wolf_location, width, height):
+        if (self.food_counter <= food_counter_wolf):
+            #check for distance from home
+            dist_home_wolf = np.sqrt((self.x - home_wolf_location.x)**2 + (self.y - home_wolf_location.y)**2)
+            #check if wolf is in or outside home and move if so
+            if (dist_home_wolf < Home_wolf_size):
+                dx = self.x - home_wolf_location.x
+                dy = self.y - home_wolf_location.y
+                move_x = 2 if dx > 0 else -2 if dx < 0 else 0
+                move_y = 2 if dy > 0 else -2 if dy < 0 else 0
+
+                self.x = (self.x + move_x) % width
+                self.y = (self.y + move_y) % height
+            else:
+                #cheking for nearest rabbit
+                nearest_rabbit = min(rabbits, key=lambda r: (self.x - r.x)**2 + (self.y - r.y)**2)
+                if (nearest_rabbit > wolf_sight_radius):
+                    #move randomly if there is no rabbits in sight
+                    self.x = (self.x + random.choice([-2, 0, 2])) % width
+                    self.y = (self.y + random.choice([-2, 0, 2])) % height
+                else:
+                    #trying to catch rabbit
+                    dx = nearest_rabbit.x - self.x
+                    dy = nearest_rabbit.y - self.y
+                
+                    move_x = 2 if dx > 0 else -2 if dx < 0 else 0
+                    move_y = 2 if dy > 0 else -2 if dy < 0 else 0
+
+                    self.x = (self.x + move_x) % width
+                    self.y = (self.y + move_y) % height
+            self.hunger += 1
+        else:
+            if (dist_home_wolf > Home_wolf_size):
+                #moving in direction of home
+                dx = self.x - home_wolf_location.x
+                dy = self.y - home_wolf_location.y
+                move_x = 2 if dx < 0 else -2 if dx > 0 else 0
+                move_y = 2 if dy < 0 else -2 if dy > 0 else 0
+
+                self.x = (self.x + move_x) % width
+                self.y = (self.y + move_y) % height
+            
+            else:
+                nearest_wolf = min(wolfs, key=lambda w: (self.x - w.x)**2 + (self.y - w.y)**2)
+                if (nearest_wolf > wolf_sight_radius):
+                    #move in direction of center
+                    dx = self.x - home_wolf_location.x
+                    dy = self.y - home_wolf_location.y
+                    move_x = 2 if dx < 0 else -2 if dx > 0 else 0
+                    move_y = 2 if dy < 0 else -2 if dy > 0 else 0
+
+                    self.x = (self.x + move_x) % width
+                    self.y = (self.y + move_y) % height
+                else:
+                    #going to nearest wolf
+                    dx = nearest_wolf.x - self.x
+                    dy = nearest_wolf.y - self.y
+                
+                    move_x = 2 if dx > 0 else -2 if dx < 0 else 0
+                    move_y = 2 if dy > 0 else -2 if dy < 0 else 0
+
+                    self.x = (self.x + move_x) % width
+                    self.y = (self.y + move_y) % height
+
+
 class rabbit(Agent):
     def __init__(self, x, y):
         super().__init__(x,y)
         self.food_counter = 0
-#Here needs to be logic for rabbits to move
+        self.Have_House = False
+    def move(self, wolfs, homes_rabbit, width, height):
+        #checking if rabbit is in house
+        if (self.food_counter <= food_counter_rabbit):
+            for h in homes_rabbit:
+                #moving outside of house and saving it as my house
+                if (self.x == h.x) and (self.y == h.y):
+                    My_home = []
+                    My_home.x = h.x
+                    My_home.y = h.y
+                    self.Have_House = True
+                    self.x = (self.x + random.choice([-1, 0, 1])) % width
+                    self.y = (self.y + random.choice([-1, 0, 1])) % height
+                    self.food_counter +=1
+                else:
+                    #cheaking for nearby wolfs
+                    nearby_wolfs = []
+                    for w in wolfs:
+                        dist = np.sqrt((self.x - w.x)**2 + (self.y - w.y))
+                        if (dist < rabbit_sight_radius):
+                            nearby_wolfs.append(w)
+                    if nearby_wolfs:
+                        #running away from wolfs
+                        avg_x = sum(z.x for z in nearby_wolfs) / len(nearby_wolfs)
+                        avg_y = sum(z.y for z in nearby_wolfs) / len(nearby_wolfs)
 
-home_wolf_location = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(1)]
-#Now randomized, need to change to spawn in center
-wolfs = [wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_wolf)] 
-#Now randomized, need to change to spawn in radius of home wolf
+                        dx = self.x - avg_x
+                        dy = self.y - avg_y
+
+                        move_x = 1 if dx > 0 else -1 if dx < 0 else 0
+                        move_y = 1 if dy > 0 else -1 if dy < 0 else 0
+
+                        self.x = (self.x + move_x) % width
+                        self.y = (self.y + move_y) % height
+                    else:
+                        #moving randomly
+                        self.x = (self.x + random.choice([-1, 0, 1])) % width
+                        self.y = (self.y + random.choice([-1, 0, 1])) % height
+                        self.food_counter +=1
+        else:
+            dx = My_home.x - self.x
+            dy = My_home.y - self.y
+
+            move_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            move_y = 1 if dy > 0 else -1 if dy < 0 else 0
+
+            self.x = (self.x + move_x) % width
+            self.y = (self.y + move_y) % height
+
+
+
+
+
+
+home_wolf_location = [home_wolf(round(GRID_SIZE/2),round(GRID_SIZE/2)) for _ in range(1)]
+wolfs = [wolf(random.randint(round((GRID_SIZE/2 - Home_wolf_size)), round((GRID_SIZE/2 + Home_wolf_size))), random.randit(round(GRID_SIZE), Home_wolf_size-1)) for _ in range(NUM_wolf)] 
+homes_rabbit = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(round(NUM_rabbit/Starting_amount_rabbits_in_house))]
+#Now fully randomized, need to change to spawn around center (outside of the radius of home wolf)
 rabbits = [rabbit(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit)] 
-#Now randomized, need to change to spawn around center (outside of the radius of home wolf)
-homes_rabbit = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit/2)]
-#Now randomized, need to change to spawn around center (outside of the radius of hove wolf)
+#Now fully randomized, need to spawn inside of house 
 
 def update(frame):
     global wolfs, rabbits, homes_rabbit, home_wolf_location
+
+    #1 Movement
+    for w in wolfs:
+        w.move(rabbits, home_wolf_location, GRID_SIZE, GRID_SIZE)
+    for r in rabbits:
+        r.move(wolfs, homes_rabbit, GRID_SIZE, GRID_SIZE)
+    
+    #NEADS TO BE DONE
+    
+    #2 interections (eating, duplicating, sneaking(if rabbit is in house he will not be able to be eaten), and anything else you want)
+
+    #3 Starvation 
+
+    #4 Animation
 
     
