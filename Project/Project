@@ -8,10 +8,10 @@ GRID_SIZE = 50
 NUM_wolf = 10
 NUM_rabbit = 20
 Hunting_skill_average = 0.8
-food_counter_wolf = 5 #amount of food that wolf needs to eat to make new wolf (and to be alive)
-WOLF_STARVE_LIMIT = 20 #amount of days wolf can live without food
+food_counter_wolf = 3 #amount of food that wolf needs to eat to make new wolf (and to be alive)
+WOLF_STARVE_LIMIT = 40 #amount of days wolf can live without food
 food_counter_rabbit = 20 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
-Starting_amount_rabbits_in_house = 2 #amount of rabbits that are in one house in the begining of run
+Starting_amount_rabbits_in_house = 2 #amount of rabbits that are in one house in the beginning of run
 rabbit_sight_radius = 4 #from what distance rabbit can see wolf
 wolf_sight_radius = 5 #from what distance wolf can see rabbit
 Home_wolf_size = 15 #size of a house of wolfs
@@ -32,7 +32,7 @@ class home_rabbit(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
 #    def check(self, rabbit):
-# needs to check if there is two rabbits in home, if it is true no more rabbits allowed
+
 class home_wolf(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
@@ -44,9 +44,10 @@ class wolf(Agent):
         self.food_counter = 0
         self.hunger = 0
     def move(self, rabbits, wolfs, home_wolf_location, width, height):
+        self.hunger += 1
         #check for distance from home
         dist_home_wolf = np.sqrt((self.x - home_wolf_location[0].x)**2 + (self.y - home_wolf_location[0].y)**2)
-        if (self.food_counter <= food_counter_wolf):
+        if (self.food_counter < food_counter_wolf):
             #check if wolf is in or outside home and move if so
             if (dist_home_wolf < Home_wolf_size):
                 dx = self.x - home_wolf_location[0].x
@@ -57,8 +58,17 @@ class wolf(Agent):
                 self.x = (self.x + move_x) % width
                 self.y = (self.y + move_y) % height
             else:
+                # ignore rabbits that are hiding in their own home
+                huntable = [r for r in rabbits if not (r.x == r.My_home_x and r.y == r.My_home_y)]
+
+                if not huntable:
+                # no huntable rabbits -> wander
+                    self.x = (self.x + random.choice([-2, 0, 2])) % width
+                    self.y = (self.y + random.choice([-2, 0, 2])) % height
+                    return
+                
                 #cheking for nearest rabbit
-                nearest_rabbit = min(rabbits, key=lambda r: (self.x - r.x)**2 + (self.y - r.y)**2)
+                nearest_rabbit = min(huntable, key=lambda r: (self.x - r.x)**2 + (self.y - r.y)**2)
                 if (np.sqrt((self.x - nearest_rabbit.x)**2 + (self.y - nearest_rabbit.y)**2) > wolf_sight_radius):
                     #move randomly if there is no rabbits in sight
                     self.x = (self.x + random.choice([-2, 0, 2])) % width
@@ -73,7 +83,7 @@ class wolf(Agent):
 
                     self.x = (self.x + move_x) % width
                     self.y = (self.y + move_y) % height
-            self.hunger += 1
+            
         else:
             #moving in direction of home
             dx = self.x - home_wolf_location[0].x
@@ -90,49 +100,57 @@ class rabbit(Agent):
         super().__init__(x,y)
         self.food_counter = 0
         self.Have_House = False
-        self.My_home_x = 1
-        self.My_home_y = 1
+        self.My_home_x = None
+        self.My_home_y = None
     def move(self, wolfs, homes_rabbit, width, height):
-        if (self.food_counter <= food_counter_rabbit):
-            for h in homes_rabbit:
-                #moving outside of house and saving it as my house
-                if (self.x == h.x) and (self.y == h.y):
-                    self.My_home_x = h.x
-                    self.My_home_y = h.y
-                    self.Have_House = True
-                    self.x = (self.x + random.choice([-1, 0, 1])) % width
-                    self.y = (self.y + random.choice([-1, 0, 1])) % height
-                    self.food_counter +=1
-                else:
-                    #cheaking for nearby wolfs
-                    nearby_wolfs = []
-                    for w in wolfs:
-                        dist = np.sqrt((self.x - w.x)**2 + (self.y - w.y)**2)
-                        if (dist < rabbit_sight_radius):
-                            nearby_wolfs.append(w)
-                    if nearby_wolfs:
-                        if nearby_wolfs and self.My_home_x is not None:
-                            dx = self.My_home_x - self.x
-                            dy = self.My_home_y - self.y
-                            move_x = 1 if dx > 0 else -1 if dx < 0 else 0
-                            move_y = 1 if dy > 0 else -1 if dy < 0 else 0
-                        else:
-                            move_x = (self.x + random.choice([-1, 0, 1])) % width
-                            move_y = (self.y + random.choice([-1, 0, 1])) % height
-                    else:
-                        #moving randomly
-                        self.x = (self.x + random.choice([-1, 0, 1])) % width
-                        self.y = (self.y + random.choice([-1, 0, 1])) % height
-                        self.food_counter +=1
-        else:
+        # 1) If rabbit has no home yet, assign one ONCE (nearest home)
+        if self.My_home_x is None and homes_rabbit:
+            nearest_home = min(
+                homes_rabbit,
+                key=lambda h: (self.x - h.x)**2 + (self.y - h.y)**2
+            )
+            self.My_home_x, self.My_home_y = nearest_home.x, nearest_home.y
+            self.Have_House = True
+
+        # 2) Scan for nearby wolves
+        nearby_wolfs = []
+        for w in wolfs:
+            dist = np.sqrt((self.x - w.x)**2 + (self.y - w.y)**2)
+            if dist < rabbit_sight_radius:
+                nearby_wolfs.append(w)
+
+        # 3) Decide next position (nx, ny)
+        if nearby_wolfs and self.My_home_x is not None:
+            # Run toward home
             dx = self.My_home_x - self.x
             dy = self.My_home_y - self.y
+            step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            nx = (self.x + step_x) % width
+            ny = (self.y + step_y) % height
+        else:
+            # Wander randomly
+            nx = (self.x + random.choice([-1, 0, 1])) % width
+            ny = (self.y + random.choice([-1, 0, 1])) % height
 
-            move_x = 1 if dx > 0 else -1 if dx < 0 else 0
-            move_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            # Gain food only while wandering and not already "full"
+            if self.food_counter <= food_counter_rabbit:
+                if not (nx == self.My_home_x and ny == self.My_home_y):
+                    self.food_counter += 1
 
-            self.x = (self.x + move_x) % width
-            self.y = (self.y + move_y) % height
+
+        # 4) Apply movement
+        self.x, self.y = nx, ny
+
+        # 5) If rabbit is "full", it tends to return home 
+        if self.food_counter > food_counter_rabbit and self.My_home_x is not None:
+            dx = self.My_home_x - self.x
+            dy = self.My_home_y - self.y
+            step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            self.x = (self.x + step_x) % width
+            self.y = (self.y + step_y) % height
+
 
 
 
@@ -167,15 +185,13 @@ for idx, h in enumerate(homes_rabbit):
     for _ in range(count):
         x, y = h.x, h.y
         rb = rabbit(x, y)
-        rb.home_x, rb.home_y = h.x, h.y
+        rb.My_home_x, rb.My_home_y = h.x, h.y
         rabbits.append(rb)
 
 def update(frame):
     global wolfs, rabbits, homes_rabbit, home_wolf_location
 
-    #Needed for avoiding overlaps
-    rabbit_cells = set((r.x, r.y) for r in rabbits)
-    wolf_cells = set((w.x, w.y) for w in wolfs)
+
     home_cells = set((h.x, h.y) for h in homes_rabbit)
 
     #1 Movement
@@ -192,7 +208,7 @@ def update(frame):
     for w in wolfs:
         for i, r in enumerate(rabbits):
             if abs(w.x - r.x) + abs(w.y - r.y) <= Pack_radius:
-                if (r.x, r.y) in home_cells:
+                if r.My_home_x == r.x and r.My_home_y == r.y:
                     continue
                 eaten.add(i)
                 w.food_counter += 1
@@ -210,7 +226,8 @@ def update(frame):
             h = random.choice(homes_rabbit)
             bx, by = h.x, h.y
             baby = rabbit(bx, by)
-            baby.home_x, baby.home_y = h.x, h.y
+            baby.My_home_x, baby.My_home_y = h.x, h.y
+            baby.Have_House = True
             newborn_rabbits.append(baby)
     rabbits.extend(newborn_rabbits)
     
@@ -259,30 +276,6 @@ def update(frame):
     #starvation for wolfs
     wolfs = [w for w in wolfs if w.hunger < WOLF_STARVE_LIMIT]
 
-    #animation
-    plt.cla()
-    ax = plt.gca()
-    ax.set_title(f"Step: {frame} | wolfs: {len(wolfs)} | rabbits: {len(rabbits)}")
-    ax.set_xlim(0, GRID_SIZE)
-    ax.set_ylim(0, GRID_SIZE)
-    ax.set_aspect('equal', adjustable='box') # Ensure squares appear as squares
 
-    # Display images for humans and zombies
-    for w in wolfs:
-        ax.imshow(wolf_img, extent=[w.x, w.x + 1, w.y, w.y + 1], origin='lower')
-    for r in rabbits:
-        ax.imshow(rabbit_img, extent=[r.x, r.x + 1, r.y, r.y + 1], origin='lower')
-    for hw in home_wolf_location:
-        ax.imshow(home_wolf_img, extent=[hw.x, hw.x + 1, hw.y, hw.y + 1], origin='lower')
-    for hr in homes_rabbit:
-        ax.imshow(home_rabbit_img, extent=[hr.x, hr.x + 1, hr.y, hr.y + 1], origin='lower')
 
-    # We no longer need plt.scatter and legend for individual agents if using images
-    # If you want a legend for the overall type, you'd add a dummy plot or custom legend.
-    # For now, the images themselves represent the agents.
-    from IPython.display import HTML
-
-    fig = plt.figure(figsize=(6, 6))
-    ani = animation.FuncAnimation(fig, update, frames=40, interval=50, cache_frame_data=False)
-    HTML(ani.to_jshtml())
     
