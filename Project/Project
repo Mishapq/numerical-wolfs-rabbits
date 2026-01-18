@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.patches as patches
+from matplotlib.patches import Polygon, Wedge
 import random
 from PIL import Image
 
@@ -9,7 +11,7 @@ NUM_wolf = 10
 NUM_rabbit = 20
 Hunting_skill_average = 0.8
 food_counter_wolf = 3 #amount of food that wolf needs to eat to make new wolf (and to be alive)
-WOLF_STARVE_LIMIT = 40 #amount of days wolf can live without food
+WOLF_STARVE_LIMIT = 3 #amount of days wolf can live without food
 food_counter_rabbit = 20 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
 Starting_amount_rabbits_in_house = 2 #amount of rabbits that are in one house in the beginning of run
 rabbit_sight_radius = 4 #from what distance rabbit can see wolf
@@ -153,6 +155,101 @@ class rabbit(Agent):
 
 
 
+def draw_wolf(ax, x, y, food_counter, hunger):
+    """Малює волка як трикутник (голова направлена)"""
+    hunger_ratio = min(hunger / WOLF_STARVE_LIMIT, 1.0)
+    
+    if hunger_ratio > 0.7:
+        body_color = '#A9A9A9'
+        head_color = '#C0C0C0'
+    else:
+        food_ratio = min(food_counter / food_counter_wolf, 1.0)
+        intensity = 0.4 + food_ratio * 0.3
+        body_color = (intensity, intensity, intensity)
+        head_color = (intensity + 0.1, intensity + 0.1, intensity + 0.1)
+    
+    body = Polygon([
+        [x - 0.35, y - 0.25],
+        [x + 0.35, y - 0.25],
+        [x + 0.15, y + 0.35],
+        [x - 0.15, y + 0.35]
+    ], color=body_color, edgecolor='#696969', linewidth=1.2, alpha=0.95)
+    ax.add_patch(body)
+    
+    head = Polygon([
+        [x - 0.2, y + 0.35],
+        [x + 0.2, y + 0.35],
+        [x, y + 0.55]
+    ], color=head_color, edgecolor='#696969', linewidth=1.2, alpha=0.95)
+    ax.add_patch(head)
+    
+    ear_left = Polygon([
+        [x - 0.15, y + 0.45],
+        [x - 0.12, y + 0.65],
+        [x - 0.05, y + 0.5]
+    ], color=body_color, edgecolor='#696969', linewidth=0.8, alpha=0.95)
+    ax.add_patch(ear_left)
+    
+    ear_right = Polygon([
+        [x + 0.15, y + 0.45],
+        [x + 0.12, y + 0.65],
+        [x + 0.05, y + 0.5]
+    ], color=body_color, edgecolor='#696969', linewidth=0.8, alpha=0.95)
+    ax.add_patch(ear_right)
+
+def draw_rabbit(ax, x, y, food_level):
+    """Малює зайця як коло з вушами"""
+    food_ratio = min(food_level / food_counter_rabbit, 1.0)
+    
+    base_color = 0.8 + food_ratio * 0.2
+    rabbit_color = (base_color, base_color - 0.1, base_color - 0.2)
+    
+    body = plt.Circle((x, y), 0.35, color=rabbit_color, alpha=0.95, edgecolor='#8B7355', linewidth=1)
+    ax.add_patch(body)
+    
+    ear_left = plt.Circle((x - 0.15, y + 0.5), 0.15, color=rabbit_color, alpha=0.95, edgecolor='#8B7355', linewidth=0.8)
+    ax.add_patch(ear_left)
+    
+    ear_right = plt.Circle((x + 0.15, y + 0.5), 0.15, color=rabbit_color, alpha=0.95, edgecolor='#8B7355', linewidth=0.8)
+    ax.add_patch(ear_right)
+    
+    inner_left = plt.Circle((x - 0.15, y + 0.5), 0.08, color='#DEB887', alpha=0.8)
+    ax.add_patch(inner_left)
+    
+    inner_right = plt.Circle((x + 0.15, y + 0.5), 0.08, color='#DEB887', alpha=0.8)
+    ax.add_patch(inner_right)
+
+def draw_rabbit_home(ax, x, y):
+    """Малює коричневу норку"""
+    home = Wedge((x, y), 0.9, 0, 180, color='#8B4513', alpha=0.7, edgecolor='#654321', linewidth=2)
+    ax.add_patch(home)
+    
+    shadow = Wedge((x, y), 0.75, 0, 180, color='#654321', alpha=0.5, edgecolor='none')
+    ax.add_patch(shadow)
+
+def draw_wolf_den(ax, x, y):
+    """Малює пещеру для волків"""
+    cave = Wedge((x, y), 1.2, 0, 180, color='#708090', alpha=0.75, edgecolor='#2F4F4F', linewidth=2.5)
+    ax.add_patch(cave)
+    
+    cave_shadow = Wedge((x, y), 1.0, 0, 180, color='#2F4F4F', alpha=0.6, edgecolor='none')
+    ax.add_patch(cave_shadow)
+    
+    stone1 = Polygon([
+        [x - 0.6, y + 0.15],
+        [x - 0.8, y + 0.05],
+        [x - 0.7, y - 0.1]
+    ], color='#696969', alpha=0.7, edgecolor='#2F4F4F', linewidth=1)
+    ax.add_patch(stone1)
+    
+    stone2 = Polygon([
+        [x + 0.6, y + 0.15],
+        [x + 0.8, y + 0.05],
+        [x + 0.7, y - 0.1]
+    ], color='#696969', alpha=0.7, edgecolor='#2F4F4F', linewidth=1)
+    ax.add_patch(stone2)
+
+
 
 c_x = GRID_SIZE // 2
 c_y = GRID_SIZE // 2
@@ -264,8 +361,13 @@ def update(frame):
                 w1.food_counter -= food_counter_wolf
                 w2.food_counter -= food_counter_wolf
 
-                bx, by = random.randint(lower_wolf_house, upper_wolf_house), random.randint(lower_wolf_house, upper_wolf_house)
+              
+                bx = hx + random.randint(-3, 3)
+                by = hy + random.randint(-3, 3)
+                bx = max(0, min(GRID_SIZE - 1, bx))
+                by = max(0, min(GRID_SIZE - 1, by))
                 newborn_wolves.append(wolf(bx, by))
+
 
                 used.add(i)
                 used.add(j)
@@ -275,6 +377,66 @@ def update(frame):
     
     #starvation for wolfs
     wolfs = [w for w in wolfs if w.hunger < WOLF_STARVE_LIMIT]
+
+    ax.clear()
+    
+    grid = np.zeros((GRID_SIZE, GRID_SIZE, 3))
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            green_base = 0.3 + (i / GRID_SIZE) * 0.15
+            green_var = 0.2 + (j / GRID_SIZE) * 0.2
+            grid[i, j] = [0.1 + green_base * 0.1, green_base + green_var * 0.1, 0.05 + green_base * 0.05]
+    
+    ax.imshow(grid, origin='lower', extent=[0, GRID_SIZE, 0, GRID_SIZE])
+    
+    for h in homes_rabbit:
+        draw_rabbit_home(ax, h.x, h.y)
+    
+    wh = home_wolf_location[0]
+    draw_wolf_den(ax, wh.x, wh.y)
+    
+    for r in rabbits:
+        draw_rabbit(ax, r.x, r.y, r.food_counter)
+    
+    for w in wolfs:
+        draw_wolf(ax, w.x, w.y, w.food_counter, w.hunger)
+    
+    stats_text = f'Frame: {frame} | Wolves: {len(wolfs)} | Rabbits: {len(rabbits)}'
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+            fontsize=11, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+            color='#2F4F4F', weight='bold', family='monospace')
+    
+    ax.set_xlim(0, GRID_SIZE)
+    ax.set_ylim(0, GRID_SIZE)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.15, color='white', linestyle='--', linewidth=0.5)
+    ax.set_xlabel('X Координата', fontsize=10, color='white')
+    ax.set_ylabel('Y Координата', fontsize=10, color='white')
+    ax.set_title('Симуляція: Вовки 🐺 та Кролики 🐰', fontsize=14, weight='bold', color='white', pad=15)
+    
+    ax.set_facecolor('#1a1a2e')
+    fig.patch.set_facecolor('#0f3460')
+
+# Create animation
+fig, ax = plt.subplots(figsize=(14, 10), facecolor='#0f3460')
+
+# Create animation with smooth updates
+ani = animation.FuncAnimation(fig, update, frames=2000, interval=50, repeat=True, repeat_delay=2000)
+
+# Add legend
+from matplotlib.patches import Patch
+legend_elements = [
+    Patch(facecolor='#708090', edgecolor='#2F4F4F', label='🐺 Вовки (сірі, пещера)'),
+    Patch(facecolor='#DEB887', edgecolor='#8B7355', label='🐰 Кролики (бежеві, норка коричнева)'),
+]
+ax.legend(handles=legend_elements, loc='upper left', fontsize=10, 
+          framealpha=0.95, facecolor='#2F4F4F', edgecolor='white', labelcolor='white')
+
+plt.tight_layout()
+plt.show()
+
+
 
 
 
