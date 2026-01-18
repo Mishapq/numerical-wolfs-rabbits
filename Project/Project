@@ -5,16 +5,23 @@ import random
 from PIL import Image
 
 GRID_SIZE = 50
-NUM_wolf = 20
+NUM_wolf = 10
 NUM_rabbit = 20
 Hunting_skill_average = 0.8
 food_counter_wolf = 3 #amount of food that wolf needs to eat to make new wolf (and to be alive)
-food_counter_rabbit = 8 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
-FEAR_RADIUS = 3
+WOLF_STARVE_LIMIT = 40 #amount of days wolf can live without food
+food_counter_rabbit = 20 #amount of food that rabbit needs to eat to make new rabbit (and to be alive)
+Starting_amount_rabbits_in_house = 2 #amount of rabbits that are in one house in the beginning of run
+rabbit_sight_radius = 4 #from what distance rabbit can see wolf
+wolf_sight_radius = 5 #from what distance wolf can see rabbit
+Home_wolf_size = 15 #size of a house of wolfs
+Pack_radius = 2 #How near wolfs need to be to reproduce (and to eat rabbit, because I`m to lazy to make another one)
 
 wolf_img = Image.new('RGB', (1, 1), color = 'red') # 1x1 pixel red square
 rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
-rabbit_img = Image.new('RGB', (1, 1), color = 'blue') # 1x1 pixel blue square
+home_rabbit_img = Image.new('RGB', (1, 1), color = 'black') # 1x1 pixel white square
+home_wolf_img = Image.new('RGB', (1, 1), color = 'gray') 
+# Should be able to see throug color of wolf home
 
 class Agent:
     def __init__(self, x, y):
@@ -25,34 +32,250 @@ class home_rabbit(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
 #    def check(self, rabbit):
-# needs to check if there is two rabbits in home, if it is true no more rabbits allowed
+
 class home_wolf(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
-#    def check(self, rabbit):
-# shood be bigger then one space to be able to take all the wolfs
+
 class wolf(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.speed = np.clip(np.random.normal(Hunting_skill_average, 0.1), 0.1, 0.9)
         self.food_counter = 0
-#Here needs to be logic for wolfs to move
+        self.hunger = 0
+    def move(self, rabbits, wolfs, home_wolf_location, width, height):
+        self.hunger += 1
+        #check for distance from home
+        dist_home_wolf = np.sqrt((self.x - home_wolf_location[0].x)**2 + (self.y - home_wolf_location[0].y)**2)
+        if (self.food_counter < food_counter_wolf):
+            #check if wolf is in or outside home and move if so
+            if (dist_home_wolf < Home_wolf_size):
+                dx = self.x - home_wolf_location[0].x
+                dy = self.y - home_wolf_location[0].y
+                move_x = 2 if dx > 0 else -2 if dx < 0 else 0
+                move_y = 2 if dy > 0 else -2 if dy < 0 else 0
+
+                self.x = (self.x + move_x) % width
+                self.y = (self.y + move_y) % height
+            else:
+                # ignore rabbits that are hiding in their own home
+                huntable = [r for r in rabbits if not (r.x == r.My_home_x and r.y == r.My_home_y)]
+
+                if not huntable:
+                # no huntable rabbits -> wander
+                    self.x = (self.x + random.choice([-2, 0, 2])) % width
+                    self.y = (self.y + random.choice([-2, 0, 2])) % height
+                    return
+                
+                #cheking for nearest rabbit
+                nearest_rabbit = min(huntable, key=lambda r: (self.x - r.x)**2 + (self.y - r.y)**2)
+                if (np.sqrt((self.x - nearest_rabbit.x)**2 + (self.y - nearest_rabbit.y)**2) > wolf_sight_radius):
+                    #move randomly if there is no rabbits in sight
+                    self.x = (self.x + random.choice([-2, 0, 2])) % width
+                    self.y = (self.y + random.choice([-2, 0, 2])) % height
+                else:
+                    #trying to catch rabbit
+                    dx = nearest_rabbit.x - self.x
+                    dy = nearest_rabbit.y - self.y
+                
+                    move_x = 2 if dx > 0 else -2 if dx < 0 else 0
+                    move_y = 2 if dy > 0 else -2 if dy < 0 else 0
+
+                    self.x = (self.x + move_x) % width
+                    self.y = (self.y + move_y) % height
+            
+        else:
+            #moving in direction of home
+            dx = self.x - home_wolf_location[0].x
+            dy = self.y - home_wolf_location[0].y
+            move_x = 2 if dx < 0 else -2 if dx > 0 else 0
+            move_y = 2 if dy < 0 else -2 if dy > 0 else 0
+
+            self.x = (self.x + move_x) % width
+            self.y = (self.y + move_y) % height
+
+
 class rabbit(Agent):
     def __init__(self, x, y):
         super().__init__(x,y)
         self.food_counter = 0
-#Here needs to be logic for rabbits to move
+        self.Have_House = False
+        self.My_home_x = None
+        self.My_home_y = None
+    def move(self, wolfs, homes_rabbit, width, height):
+        # 1) If rabbit has no home yet, assign one ONCE (nearest home)
+        if self.My_home_x is None and homes_rabbit:
+            nearest_home = min(
+                homes_rabbit,
+                key=lambda h: (self.x - h.x)**2 + (self.y - h.y)**2
+            )
+            self.My_home_x, self.My_home_y = nearest_home.x, nearest_home.y
+            self.Have_House = True
 
-home_wolf_location = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(1)]
-#Now randomized, need to change to spawn in center
-wolfs = [wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_wolf)] 
-#Now randomized, need to change to spawn in radius of home wolf
-rabbits = [rabbit(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit)] 
-#Now randomized, need to change to spawn around center (outside of the radius of home wolf)
-homes_rabbit = [home_wolf(random.randint(0, GRID_SIZE-1), random.randit(0,GRID_SIZE-1)) for _ in range(NUM_rabbit/2)]
-#Now randomized, need to change to spawn around center (outside of the radius of hove wolf)
+        # 2) Scan for nearby wolves
+        nearby_wolfs = []
+        for w in wolfs:
+            dist = np.sqrt((self.x - w.x)**2 + (self.y - w.y)**2)
+            if dist < rabbit_sight_radius:
+                nearby_wolfs.append(w)
+
+        # 3) Decide next position (nx, ny)
+        if nearby_wolfs and self.My_home_x is not None:
+            # Run toward home
+            dx = self.My_home_x - self.x
+            dy = self.My_home_y - self.y
+            step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            nx = (self.x + step_x) % width
+            ny = (self.y + step_y) % height
+        else:
+            # Wander randomly
+            nx = (self.x + random.choice([-1, 0, 1])) % width
+            ny = (self.y + random.choice([-1, 0, 1])) % height
+
+            # Gain food only while wandering and not already "full"
+            if self.food_counter <= food_counter_rabbit:
+                if not (nx == self.My_home_x and ny == self.My_home_y):
+                    self.food_counter += 1
+
+
+        # 4) Apply movement
+        self.x, self.y = nx, ny
+
+        # 5) If rabbit is "full", it tends to return home 
+        if self.food_counter > food_counter_rabbit and self.My_home_x is not None:
+            dx = self.My_home_x - self.x
+            dy = self.My_home_y - self.y
+            step_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            step_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            self.x = (self.x + step_x) % width
+            self.y = (self.y + step_y) % height
+
+
+
+
+c_x = GRID_SIZE // 2
+c_y = GRID_SIZE // 2
+
+lower_wolf_house = round(c_x - Home_wolf_size)
+upper_wolf_house = round(c_y + Home_wolf_size)
+
+
+home_wolf_location = [home_wolf(round(GRID_SIZE/2),round(GRID_SIZE/2)) for _ in range(1)]
+wolfs = [wolf(random.randint(lower_wolf_house, upper_wolf_house), random.randint(lower_wolf_house, upper_wolf_house)) for _ in range(NUM_wolf)]
+
+def spawn_far_from(cx, cy, Home_wolf_size):
+    while True:
+        x = random.randint(0, GRID_SIZE - 1)
+        y = random.randint(0, GRID_SIZE - 1)
+        if abs(x - cx) + abs(y - cy) >= Home_wolf_size:   # manhattan distance
+            return x, y
+
+NUM_RABBIT_HOMES = NUM_rabbit // Starting_amount_rabbits_in_house
+homes_rabbit = []
+for _ in range(NUM_RABBIT_HOMES):
+    hx, hy = spawn_far_from(c_x, c_y, Home_wolf_size)
+    homes_rabbit.append(home_rabbit(hx, hy))
+rabbits = []
+base = NUM_rabbit // NUM_RABBIT_HOMES
+extra = NUM_rabbit % NUM_RABBIT_HOMES
+#Spawn rabbits evenly
+for idx, h in enumerate(homes_rabbit):
+    count = base + (1 if idx < extra else 0)
+    for _ in range(count):
+        x, y = h.x, h.y
+        rb = rabbit(x, y)
+        rb.My_home_x, rb.My_home_y = h.x, h.y
+        rabbits.append(rb)
 
 def update(frame):
     global wolfs, rabbits, homes_rabbit, home_wolf_location
+
+
+    home_cells = set((h.x, h.y) for h in homes_rabbit)
+
+    #1 Movement
+    for w in wolfs:
+        w.move(rabbits, wolfs, home_wolf_location, GRID_SIZE, GRID_SIZE)
+    for r in rabbits:
+        r.move(wolfs, homes_rabbit, GRID_SIZE, GRID_SIZE)
+    
+    #NEADS TO BE DONE
+    
+    # Interaction 
+    eaten = set()
+    
+    for w in wolfs:
+        for i, r in enumerate(rabbits):
+            if abs(w.x - r.x) + abs(w.y - r.y) <= Pack_radius:
+                if r.My_home_x == r.x and r.My_home_y == r.y:
+                    continue
+                eaten.add(i)
+                w.food_counter += 1
+                w.hunger = 0
+                break
+    
+    if eaten:
+        rabbits = [r for i, r in enumerate(rabbits) if i not in eaten]
+        
+    #Reproduction
+    newborn_rabbits = []
+    for r in rabbits:
+        if r.food_counter >= food_counter_rabbit:
+            r.food_counter -= food_counter_rabbit
+            h = random.choice(homes_rabbit)
+            bx, by = h.x, h.y
+            baby = rabbit(bx, by)
+            baby.My_home_x, baby.My_home_y = h.x, h.y
+            baby.Have_House = True
+            newborn_rabbits.append(baby)
+    rabbits.extend(newborn_rabbits)
+    
+    # Wolves reproduce near home when two FULL wolves are neighbors
+    hx, hy = home_wolf_location[0].x, home_wolf_location[0].y
+    newborn_wolves = []
+    used = set()
+
+    for i in range(len(wolfs)):
+        if i in used:
+            continue
+        w1 = wolfs[i]
+
+        # must be full and in home zone
+        if w1.food_counter < food_counter_wolf:
+            continue
+        if abs(w1.x - hx) + abs(w1.y - hy) > Home_wolf_size:
+            continue
+
+        # find partner
+        for j in range(i + 1, len(wolfs)):
+            if j in used:
+                continue
+            w2 = wolfs[j]
+
+            if w2.food_counter < food_counter_wolf:
+                    continue
+            if abs(w2.x - hx) + abs(w2.y - hy) > Home_wolf_size:
+                continue
+
+            # meet = neighbor 
+            if abs(w1.x - w2.x) + abs(w1.y - w2.y) <= Pack_radius:
+                # parents spend food to reproduce
+                w1.food_counter -= food_counter_wolf
+                w2.food_counter -= food_counter_wolf
+
+                bx, by = random.randint(lower_wolf_house, upper_wolf_house), random.randint(lower_wolf_house, upper_wolf_house)
+                newborn_wolves.append(wolf(bx, by))
+
+                used.add(i)
+                used.add(j)
+                break
+
+    wolfs.extend(newborn_wolves)     
+    
+    #starvation for wolfs
+    wolfs = [w for w in wolfs if w.hunger < WOLF_STARVE_LIMIT]
+
+
 
     
